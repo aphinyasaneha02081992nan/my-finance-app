@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบจัดการการเงินส่วนบุคคล & วางแผนเกษียณ</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue.js 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Prompt', sans-serif; 
+            background-color: #F0FDF4;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #A7F3D0;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 pb-12">
+    <div id="app" class="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
+        
+        <!-- Header Top Bar -->
+        <header class="bg-[#A7F3D0] p-6 rounded-3xl shadow-sm border border-emerald-200/80 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-white/90 flex items-center justify-center text-3xl shadow-sm border border-emerald-100">🐱</div>
+                <div>
+                    <h1 class="font-bold text-emerald-950 text-xl">ระบบจัดการการเงินส่วนบุคคล & วางแผนเกษียณ</h1>
+                    <p class="text-xs text-emerald-800 font-medium">บันทึกรายรับ-รายจ่าย วิเคราะห์พอร์ตลงทุน และคำนวณเป้าหมายอิสรภาพทางการเงิน</p>
+                </div>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <div class="flex bg-emerald-200/60 p-1.5 rounded-2xl text-xs font-bold gap-1 shadow-inner w-full md:w-auto justify-center">
+                <button @click="currentTab = 'record'" :class="currentTab === 'record' ? 'bg-white text-emerald-950 shadow-md' : 'text-emerald-900 hover:text-emerald-950'" class="px-5 py-2.5 rounded-xl transition-all flex items-center gap-1.5">
+                    📝 บันทึกรายการ
+                </button>
+                <button @click="currentTab = 'dashboard'" :class="currentTab === 'dashboard' ? 'bg-white text-emerald-950 shadow-md' : 'text-emerald-900 hover:text-emerald-950'" class="px-5 py-2.5 rounded-xl transition-all flex items-center gap-1.5">
+                    📊 ภาพรวม & กราฟ
+                </button>
+                <button @click="currentTab = 'retirement'" :class="currentTab === 'retirement' ? 'bg-white text-emerald-950 shadow-md' : 'text-emerald-900 hover:text-emerald-950'" class="px-5 py-2.5 rounded-xl transition-all flex items-center gap-1.5">
+                    📈 การลงทุน & เกษียณ
+                </button>
+            </div>
+        </header>
+
+        <!-- Balance Overview Bar -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-white p-5 rounded-3xl border border-emerald-100 shadow-sm flex items-center justify-between">
+                <div>
+                    <p class="text-xs font-semibold text-emerald-800">🏛️ ยอดคงเหลือสุทธิ (กระแสเงินสด)</p>
+                    <p class="text-2xl font-black text-emerald-950 mt-0.5">฿{{ formatNumber(balance) }}</p>
+                </div>
+                <button @click="clearData" class="text-[10px] text-rose-500 hover:underline bg-rose-50 px-2 py-1 rounded-lg">ล้างข้อมูล</button>
+            </div>
+            <div class="bg-white p-5 rounded-3xl border border-emerald-100 shadow-sm">
+                <p class="text-xs font-semibold text-emerald-600">💵 รายรับรวมทั้งหมด</p>
+                <p class="text-2xl font-black text-emerald-600 mt-0.5">฿{{ formatNumber(totalIncome) }}</p>
+            </div>
+            <div class="bg-white p-5 rounded-3xl border border-emerald-100 shadow-sm">
+                <p class="text-xs font-semibold text-rose-500">💸 รายจ่ายรวมทั้งหมด</p>
+                <p class="text-2xl font-black text-rose-600 mt-0.5">฿{{ formatNumber(totalExpense) }}</p>
+            </div>
+            <div class="bg-emerald-50 p-5 rounded-3xl border border-emerald-200 shadow-sm">
+                <p class="text-xs font-semibold text-emerald-700">🐷 เงินลงทุน & ออมรวม (พอร์ตสินทรัพย์)</p>
+                <p class="text-2xl font-black text-emerald-800 mt-0.5">฿{{ formatNumber(totalPortfolio) }}</p>
+            </div>
+        </div>
+
+        <!-- ================= TAB 1: RECORD (หน้าบันทึกรายการ) ================= -->
+        <div v-if="currentTab === 'record'" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-7 bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+                <div class="flex justify-between items-center border-b border-emerald-100 pb-3">
+                    <div class="flex gap-3 text-sm font-bold">
+                        <button @click="form.type = 'EXPENSE'" :class="form.type === 'EXPENSE' ? 'bg-rose-500 text-white px-4 py-1.5 rounded-xl shadow-sm' : 'text-slate-400 py-1.5'">รายจ่าย (-)</button>
+                        <button @click="form.type = 'INCOME'" :class="form.type === 'INCOME' ? 'bg-emerald-500 text-white px-4 py-1.5 rounded-xl shadow-sm' : 'text-slate-400 py-1.5'">รายรับ (+)</button>
+                    </div>
+                    <input type="text" v-model="searchQuery" placeholder="🔍 ค้นหาหมวดหมู่..." class="px-3 py-1.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-xs focus:outline-none w-48">
+                </div>
+
+                <!-- Category Grid -->
+                <div class="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-[240px] overflow-y-auto custom-scrollbar p-1">
+                    <button v-for="cat in filteredCategories" :key="cat.name"
+                        @click="form.category = cat.name"
+                        :class="form.category === cat.name ? 'bg-emerald-100 border-emerald-400 font-bold scale-95 shadow-sm' : 'bg-slate-50/60 border-slate-100 hover:bg-emerald-50'"
+                        class="p-2.5 rounded-2xl border flex flex-col items-center justify-center gap-1 transition-all">
+                        <span class="text-2xl">{{ cat.icon }}</span>
+                        <span class="text-[11px] text-slate-700 truncate w-full text-center">{{ cat.name }}</span>
+                    </button>
+                </div>
+
+                <!-- Input Display -->
+                <div class="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-200/80 space-y-3">
+                    <div class="flex justify-between items-center bg-white px-4 py-2.5 rounded-xl border border-emerald-200 shadow-inner">
+                        <span class="text-xs font-bold text-emerald-900">หมวดหมู่: {{ form.category }}</span>
+                        <div class="flex items-center gap-1">
+                            <span class="text-xl font-black text-emerald-950">฿</span>
+                            <input type="text" v-model="form.amount" placeholder="0" class="text-2xl font-black text-emerald-950 text-right w-40 focus:outline-none bg-transparent">
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <input type="date" v-model="form.date" class="px-3 py-2 bg-white border border-emerald-200 rounded-xl text-xs font-medium">
+                        <input type="text" v-model="form.note" placeholder="บันทึกช่วยจำ (เช่น กาแฟตอนเช้า)..." class="px-3 py-2 bg-white border border-emerald-200 rounded-xl text-xs font-medium">
+                    </div>
+                </div>
+
+                <!-- Keypad -->
+                <div class="bg-emerald-50/30 p-3 rounded-3xl border border-emerald-100 space-y-2">
+                    <div class="grid grid-cols-4 gap-2">
+                        <button v-for="btn in ['7','8','9','+']" :key="btn" @click="pressKey(btn)" class="py-3 bg-white rounded-2xl shadow-sm font-bold text-emerald-950 hover:bg-emerald-100">{{ btn }}</button>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button v-for="btn in ['4','5','6','-']" :key="btn" @click="pressKey(btn)" class="py-3 bg-white rounded-2xl shadow-sm font-bold text-emerald-950 hover:bg-emerald-100">{{ btn }}</button>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button v-for="btn in ['1','2','3','C']" :key="btn" @click="pressKey(btn)" class="py-3 bg-white rounded-2xl shadow-sm font-bold text-emerald-950 hover:bg-emerald-100">{{ btn }}</button>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2">
+                        <button @click="pressKey('.')" class="py-3 bg-white rounded-2xl shadow-sm font-bold text-emerald-950">.</button>
+                        <button @click="pressKey('0')" class="py-3 bg-white rounded-2xl shadow-sm font-bold text-emerald-950">0</button>
+                        <button @click="pressKey('DEL')" class="py-3 bg-white rounded-2xl shadow-sm text-xs font-bold text-rose-500">⌫</button>
+                        <button @click="addTransaction" class="py-3 bg-emerald-400 text-emerald-950 font-bold rounded-2xl shadow-md hover:bg-emerald-500 active:scale-95 text-xs">บันทึกรายการ</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-5 bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm flex flex-col justify-between">
+                <div>
+                    <h2 class="text-base font-bold text-emerald-950 mb-4 border-b border-emerald-100 pb-2">📋 ประวัติธุรกรรมล่าสุด</h2>
+                    <div class="space-y-3 max-h-[500px] overflow-y-auto custom-scrollbar pr-1">
+                        <div v-if="transactions.length === 0" class="text-center py-12 text-slate-400 text-sm">ยังไม่มีรายการบันทึก</div>
+                        <div v-for="(item, index) in transactions" :key="index" class="p-3 bg-slate-50/80 rounded-2xl flex justify-between items-center hover:bg-emerald-50/50 transition-colors border border-slate-100">
+                            <div>
+                                <p class="font-bold text-slate-800 text-sm">{{ item.category }}</p>
+                                <p class="text-xs text-slate-400">{{ item.date }} <span v-if="item.note">• {{ item.note }}</span></p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span :class="item.type === 'INCOME' ? 'text-emerald-600' : 'text-rose-500'" class="font-bold text-sm">
+                                    {{ item.type === 'INCOME' ? '+' : '-' }}฿{{ formatNumber(item.amount) }}
+                                </span>
+                                <button @click="deleteTransaction(index)" class="text-slate-300 hover:text-rose-500 text-xs px-1">✕</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB 2: DASHBOARD (ภาพรวม & กราฟ) ================= -->
+        <div v-if="currentTab === 'dashboard'" class="space-y-6">
+            <div class="bg-white p-4 rounded-3xl border border-emerald-100 shadow-sm flex justify-between items-center">
+                <span class="text-sm font-bold text-emerald-950">เลือกเดือนที่ต้องการดูรายงาน:</span>
+                <input type="month" v-model="selectedMonth" class="px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-semibold text-emerald-950">
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm text-center">
+                    <h3 class="text-sm font-bold text-emerald-950 mb-1">สัดส่วนรายจ่ายแยกตามหมวดหมู่</h3>
+                    <p class="text-xs text-rose-500 font-bold mb-4">รายจ่ายรวม ฿{{ formatNumber(selectedMonthSummary.expense) }}</p>
+                    <div class="h-[260px] flex items-center justify-center">
+                        <canvas id="bubblePieChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+                    <h3 class="text-sm font-bold text-emerald-950 mb-1">📈 แนวโน้มการใช้จ่ายรายวัน</h3>
+                    <p class="text-xs text-slate-400 mb-4">พฤติกรรมรายจ่ายย้อนหลังในเดือนนี้</p>
+                    <div class="h-[260px]">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm">
+                <h3 class="text-sm font-bold text-emerald-950 mb-4">📅 ปฏิทินแสดงรายจ่ายรายวัน</h3>
+                <div class="grid grid-cols-7 gap-2 text-center text-xs">
+                    <span v-for="d in ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์']" :key="d" class="font-bold text-emerald-800 py-1 bg-emerald-50 rounded-lg">{{ d }}</span>
+                    <div v-for="(day, idx) in calendarDays" :key="idx" 
+                        class="p-2 min-h-[60px] rounded-2xl flex flex-col justify-between border"
+                        :class="day.amount > 0 ? 'bg-emerald-50/60 border-emerald-200' : 'bg-slate-50/40 border-slate-100'">
+                        <span class="text-xs text-slate-400 font-medium text-left">{{ day.dateNumber }}</span>
+                        <span v-if="day.amount > 0" class="text-xs font-bold text-rose-500 text-right">฿{{ formatNumber(day.amount) }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ================= TAB 3: RETIREMENT & INVESTMENT ================= -->
+        <div v-if="currentTab === 'retirement'" class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Left Panel: Asset Allocation & Retirement Settings -->
+            <div class="lg:col-span-5 space-y-6">
+                <!-- 1. Asset Allocation Breakdown -->
+                <div class="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+                    <h2 class="text-base font-bold text-emerald-950 border-b border-emerald-100 pb-2 flex justify-between items-center">
+                        💼 สัดส่วนพอร์ตเงินออม & สินทรัพย์
+                        <span class="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">฿{{ formatNumber(totalPortfolio) }}</span>
+                    </h2>
+
+                    <div class="space-y-3 max-h-[360px] overflow-y-auto custom-scrollbar pr-1">
+                        <!-- เงินสดฝากธนาคาร -->
+                        <div class="bg-emerald-50/40 p-3 rounded-2xl border border-emerald-100 space-y-2">
+                            <p class="text-xs font-bold text-emerald-900 flex items-center gap-1">🏦 เงินสดฝากธนาคาร</p>
+                            <div v-for="(bank, idx) in portfolio.cash" :key="idx" class="flex gap-2 items-center">
+                                <select v-model="bank.name" class="w-1/2 px-2 py-1.5 border border-emerald-200 rounded-xl text-xs bg-white font-medium">
+                                    <option value="SCB">SCB</option>
+                                    <option value="BLA">BLA</option>
+                                    <option value="KTB">KTB</option>
+                                    <option value="KBANK">KBANK</option>
+                                    <option value="TISCO">TISCO</option>
+                                    <option value="TTB">TTB</option>
+                                    <option value="KKP">KKP</option>
+                                    <option value="อื่นๆ">อื่นๆ</option>
+                                </select>
+                                <div class="w-1/2 relative">
+                                    <span class="absolute left-2.5 top-1.5 text-xs text-slate-400">฿</span>
+                                    <input type="number" v-model.number="bank.amount" placeholder="0" class="w-full pl-6 pr-2 py-1.5 border border-emerald-200 rounded-xl text-xs bg-white text-right font-bold text-emerald-950">
+                                </div>
+                                <button @click="removeCashBank(idx)" class="text-rose-400 hover:text-rose-600 text-xs px-1">✕</button>
+                            </div>
+                            <button @click="addCashBank" class="text-[11px] text-emerald-700 font-bold hover:underline">+ เพิ่มธนาคาร</button>
+                        </div>
+
+                        <!-- หุ้นไทย -->
+                        <div class="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
+                            <span class="text-xs font-bold text-slate-800">🇹🇭 หุ้นไทย</span>
+                            <div class="relative w-36">
+                                <span class="absolute left-2.5 top-1.5 text-xs text-slate-400">฿</span>
+                                <input type="number" v-model.number="portfolio.thaiStock" class="w-full pl-6 pr-2 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-right font-bold text-slate-900">
+                            </div>
+                        </div>
+
+                        <!-- หุ้นอเมริกา -->
+                        <div class="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
+                            <span class="text-xs font-bold text-slate-800">🇺🇸 หุ้นอเมริกา</span>
+                            <div class="relative w-36">
+                                <span class="absolute left-2.5 top-1.5 text-xs text-slate-400">฿</span>
+                                <input type="number" v-model.number="portfolio.usStock" class="w-full pl-6 pr-2 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-right font-bold text-slate-900">
+                            </div>
+                        </div>
+
+                        <!-- PVD / RMF -->
+                        <div class="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
+                            <span class="text-xs font-bold text-slate-800">🛡️ PVD / RMF</span>
+                            <div class="relative w-36">
+                                <span class="absolute left-2.5 top-1.5 text-xs text-slate-400">฿</span>
+                                <input type="number" v-model.number="portfolio.pvdRmf" class="w-full pl-6 pr-2 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-right font-bold text-slate-900">
+                            </div>
+                        </div>
+
+                        <!-- ประกันออมทรัพย์ -->
+                        <div class="flex justify-between items-center bg-slate-50/80 p-3 rounded-2xl border border-slate-100">
+                            <span class="text-xs font-bold text-slate-800">📑 ประกันออมทรัพย์</span>
+                            <div class="relative w-36">
+                                <span class="absolute left-2.5 top-1.5 text-xs text-slate-400">฿</span>
+                                <input type="number" v-model.number="portfolio.savingInsurance" class="w-full pl-6 pr-2 py-1.5 border border-slate-200 rounded-xl text-xs bg-white text-right font-bold text-slate-900">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. Retirement Settings -->
+                <div class="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm space-y-4">
+                    <h2 class="text-base font-bold text-emerald-950 border-b border-emerald-100 pb-2">⚙️ ตั้งค่าสมมติฐานการเกษียณ</h2>
+                    
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 mb-1">อายุปัจจุบัน (ปี)</label>
+                                <input type="number" v-model.number="retirement.currentAge" class="w-full px-3 py-2 border border-emerald-100 rounded-xl text-sm bg-emerald-50/30">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 mb-1">เป้าเกษียณอายุ (ปี)</label>
+                                <input type="number" v-model.number="retirement.retireAge" class="w-full px-3 py-2 border border-emerald-100 rounded-xl text-sm bg-emerald-50/30">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 mb-1">คาดว่าจะใช้นานถึงอายุ</label>
+                                <input type="number" v-model.number="retirement.lifeExpectancy" class="w-full px-3 py-2 border border-emerald-100 rounded-xl text-sm bg-emerald-50/30">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 mb-1">เป้ารายจ่ายต่อเดือน</label>
+                                <input type="number" v-model.number="retirement.monthlyExpenseTarget" class="w-full px-3 py-2 border border-emerald-100 rounded-xl text-sm bg-emerald-50/30">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 mb-1">ออมเพิ่มต่อเดือน (DCA)</label>
+                                <input type="number" v-model.number="retirement.monthlyDca" class="w-full px-3 py-2 border border-emerald-100 rounded-xl text-sm bg-emerald-50/30">
+                            </div>
+                            <div>
+                                <label class="block text-[11px] font-semibold text-slate-500 mb-1">ผลตอบแทนคาดหวัง (%/ปี)</label>
+                                <input type="number" step="0.5" v-model.number="retirement.expectedReturn" class="w-full px-3 py-2 border border-emerald-100 rounded-xl text-sm bg-emerald-50/30">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Projection & Portfolio Charts -->
+            <div class="lg:col-span-7 space-y-6 flex flex-col">
+                <!-- Portfolio Donut Chart -->
+                <div class="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm flex flex-col items-center">
+                    <h3 class="text-sm font-bold text-emerald-950 mb-1 w-full text-center">สัดส่วนพอร์ตปัจจุบัน (Asset Allocation)</h3>
+                    <p class="text-xs text-emerald-600 mb-4 w-full text-center">สินทรัพย์รวมทั้งหมด ฿{{ formatNumber(totalPortfolio) }}</p>
+                    <div class="h-[200px] w-full flex items-center justify-center">
+                        <canvas id="portfolioPieChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Retirement Projection -->
+                <div class="bg-white p-6 rounded-3xl border border-emerald-100 shadow-sm flex-1 flex flex-col justify-between">
+                    <div>
+                        <h2 class="text-base font-bold text-emerald-950 border-b border-emerald-100 pb-2 mb-4">🎯 สรุปเป้าหมายเส้นทางเกษียณ</h2>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                            <div class="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200">
+                                <p class="text-[11px] text-emerald-800 font-semibold uppercase tracking-wide mb-1">เป้าหมาย ณ วันเกษียณ (บวกเงินเฟ้อ)</p>
+                                <p class="text-2xl font-black text-emerald-950">฿{{ formatNumber(retirementCalc.targetGoal) }}</p>
+                            </div>
+                            <div class="bg-teal-50/60 p-4 rounded-2xl border border-teal-200">
+                                <p class="text-[11px] text-teal-800 font-semibold uppercase tracking-wide mb-1">คาดการณ์พอร์ตเมื่อถึงวันเกษียณ</p>
+                                <p class="text-2xl font-black text-teal-700">฿{{ formatNumber(retirementCalc.projectedWealth) }}</p>
+                            </div>
+                        </div>
+
+                        <!-- Status Alert -->
+                        <div :class="retirementCalc.projectedWealth >= retirementCalc.targetGoal ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-rose-50 border-rose-300 text-rose-800'" class="p-4 rounded-2xl border text-xs font-bold mb-4">
+                            <span v-if="retirementCalc.projectedWealth >= retirementCalc.targetGoal">🎉 ยินดีด้วย! ตามแผนนี้ คุณจะมีเงินเพียงพอสำหรับเกษียณอย่างสบายใจ</span>
+                            <span v-else>⚠️ คำเตือน: พอร์ตออมอาจยังไม่พอเป้าหมาย (ขาดอีกประมาณ ฿{{ formatNumber(retirementCalc.targetGoal - retirementCalc.projectedWealth) }}) แนะนำเพิ่มการ DCA</span>
+                        </div>
+
+                        <!-- Projection Chart -->
+                        <h3 class="text-xs font-bold text-emerald-950 mb-2 mt-4">📊 กราฟจำลองพอร์ตมุ่งสู่เกษียณ</h3>
+                        <div class="h-[180px]">
+                            <canvas id="retirementChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, watch, onMounted, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                const currentTab = ref('record');
+                const selectedMonth = ref(new Date().toISOString().slice(0, 7));
+                const searchQuery = ref('');
+                let pieChart = null;
+                let lineChart = null;
+                let retirementChart = null;
+                let portfolioPieChart = null;
+
+                const categories = {
+                    EXPENSE: [
+                        { name: 'เงินออม', icon: '🐷' }, { name: 'ส่งเงินพ่อแม่', icon: '👵' },
+                        { name: 'ประกัน', icon: '📄' }, { name: 'บันเทิง', icon: '🎮' },
+                        { name: 'ผ่อนจ่าย', icon: '💳' }, { name: 'เสื้อผ้า', icon: '👕' },
+                        { name: 'ค่าหมอ', icon: '💉' }, { name: 'การศึกษา', icon: '📝' },
+                        { name: 'อุปกรณ์งาน', icon: '💻' }, { name: 'ของใช้บ้าน', icon: '🧹' },
+                        { name: 'เครื่องสำอาง', icon: '💄' }, { name: 'ความงาม', icon: '💇' },
+                        { name: 'ของขวัญ', icon: '🎁' }, { name: 'สัตว์เลี้ยง', icon: '🐶' },
+                        { name: 'ฟิตเนส', icon: '🏋️' }, { name: 'ท่องเที่ยว', icon: '🧳' },
+                        { name: 'หนังสือ', icon: '📚' }, { name: 'ทำบุญ', icon: '🙏' },
+                        { name: 'ดอกเบี้ย', icon: '📜' }, { name: 'ฉุกเฉิน', icon: '📦' },
+                        { name: 'หวย', icon: '📅' }, { name: 'ลงทุนทอง', icon: '🌻' },
+                        { name: 'อาหาร', icon: '🍚' }, { name: 'กาแฟ', icon: '☕' },
+                        { name: 'เครื่องดื่ม', icon: '🍹' }, { name: 'ค่าเดินทาง', icon: '🚌' },
+                        { name: 'แท็กซี่', icon: '🚕' }, { name: 'ช้อปออนไลน์', icon: '🛍️' },
+                        { name: 'น้ำมันรถ', icon: '⛽' }, { name: 'ค่าจอดรถ', icon: '🚧' },
+                        { name: 'สังสรรค์', icon: '🍺' }
+                    ],
+                    INCOME: [
+                        { name: 'เงินเดือน', icon: '💵' }, { name: 'ธุรกิจส่วนตัว', icon: '💼' },
+                        { name: 'การลงทุน', icon: '📈' }, { name: 'โบนัส', icon: '🎁' }
+                    ]
+                };
+
+                const transactions = ref([]);
+                const form = ref({ type: 'EXPENSE', amount: '', category: 'อาหาร', date: new Date().toISOString().split('T')[0], note: '' });
+
+                // Portfolio Breakdown State (ตามประเภทสินทรัพย์ที่คุณต้องการ)
+                const portfolio = ref({
+                    cash: [
+                        { name: 'SCB', amount: 50000 },
+                        { name: 'BLA', amount: 20000 }
+                    ],
+                    thaiStock: 30000,
+                    usStock: 50000,
+                    pvdRmf: 40000,
+                    savingInsurance: 25000
+                });
+
+                const retirement = ref({
+                    currentAge: 30, retireAge: 60, lifeExpectancy: 85,
+                    monthlyExpenseTarget: 30000, monthlyDca: 10000,
+                    expectedReturn: 7.0, inflationRate: 2.5
+                });
+
+                onMounted(() => {
+                    const savedTx = localStorage.getItem('my_finance_data_v8');
+                    if (savedTx) transactions.value = JSON.parse(savedTx);
+
+                    const savedPort = localStorage.getItem('my_finance_portfolio_v8');
+                    if (savedPort) portfolio.value = JSON.parse(savedPort);
+
+                    if (!savedTx) {
+                        transactions.value = [
+                            { type: 'INCOME', amount: 45000, category: 'เงินเดือน', date: `${selectedMonth.value}-01`, note: 'เงินเดือน' },
+                            { type: 'EXPENSE', amount: 250, category: 'อาหาร', date: `${selectedMonth.value}-02`, note: 'ข้าวกลางวัน' }
+                        ];
+                    }
+                });
+
+                watch(transactions, (newVal) => {
+                    localStorage.setItem('my_finance_data_v8', JSON.stringify(newVal));
+                    if (currentTab.value === 'dashboard') updateCharts();
+                }, { deep: true });
+
+                watch(portfolio, (newVal) => {
+                    localStorage.setItem('my_finance_portfolio_v8', JSON.stringify(newVal));
+                    if (currentTab.value === 'retirement') {
+                        renderPortfolioChart();
+                        renderRetirementChart();
+                    }
+                }, { deep: true });
+
+                watch(currentTab, (newTab) => {
+                    if (newTab === 'dashboard') nextTick(() => updateCharts());
+                    if (newTab === 'retirement') nextTick(() => {
+                        renderPortfolioChart();
+                        renderRetirementChart();
+                    });
+                });
+
+                watch(retirement, () => {
+                    if (currentTab.value === 'retirement') renderRetirementChart();
+                }, { deep: true });
+
+                const filteredCategories = computed(() => {
+                    const list = categories[form.value.type];
+                    if (!searchQuery.value) return list;
+                    return list.filter(c => c.name.includes(searchQuery.value));
+                });
+
+                const pressKey = (key) => {
+                    let currentStr = String(form.value.amount || '');
+                    if (key === 'C') form.value.amount = '';
+                    else if (key === 'DEL') form.value.amount = currentStr.slice(0, -1);
+                    else form.value.amount = currentStr + key;
+                };
+
+                const addTransaction = () => {
+                    const val = parseFloat(form.value.amount);
+                    if (!val || val <= 0) return;
+                    transactions.value.unshift({
+                        type: form.value.type, amount: val, category: form.value.category,
+                        date: form.value.date, note: form.value.note
+                    });
+                    form.value.amount = '';
+                    form.value.note = '';
+                };
+
+                const deleteTransaction = (index) => transactions.value.splice(index, 1);
+                const clearData = () => { if (confirm('ยืนยันลบข้อมูลทั้งหมด?')) transactions.value = []; };
+
+                // Portfolio Actions
+                const addCashBank = () => portfolio.value.cash.push({ name: 'KBANK', amount: 0 });
+                const removeCashBank = (index) => portfolio.value.cash.splice(index, 1);
+
+                const totalCash = computed(() => portfolio.value.cash.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0));
+                
+                const totalPortfolio = computed(() => {
+                    return totalCash.value +
+                           (parseFloat(portfolio.value.thaiStock) || 0) +
+                           (parseFloat(portfolio.value.usStock) || 0) +
+                           (parseFloat(portfolio.value.pvdRmf) || 0) +
+                           (parseFloat(portfolio.value.savingInsurance) || 0);
+                });
+
+                const totalIncome = computed(() => transactions.value.filter(t => t.type === 'INCOME').reduce((a, b) => a + b.amount, 0));
+                const totalExpense = computed(() => transactions.value.filter(t => t.type === 'EXPENSE').reduce((a, b) => a + b.amount, 0));
+                const balance = computed(() => totalIncome.value - totalExpense.value);
+
+                const selectedMonthSummary = computed(() => {
+                    const filtered = transactions.value.filter(t => t.date.startsWith(selectedMonth.value));
+                    return { expense: filtered.filter(t => t.type === 'EXPENSE').reduce((a, b) => a + b.amount, 0) };
+                });
+
+                const calendarDays = computed(() => {
+                    const [year, month] = selectedMonth.value.split('-').map(Number);
+                    const daysInMonth = new Date(year, month, 0).getDate();
+                    const days = [];
+                    for (let i = 1; i <= daysInMonth; i++) {
+                        const dayStr = String(i).padStart(2, '0');
+                        const fullDate = `${selectedMonth.value}-${dayStr}`;
+                        const dayExpense = transactions.value.filter(t => t.date === fullDate && t.type === 'EXPENSE').reduce((sum, t) => sum + t.amount, 0);
+                        days.push({ dateNumber: i, amount: dayExpense });
+                    }
+                    return days;
+                });
+
+                const retirementCalc = computed(() => {
+                    const yearsToRetire = Math.max(1, retirement.value.retireAge - retirement.value.currentAge);
+                    const yearsInRetirement = Math.max(1, retirement.value.lifeExpectancy - retirement.value.retireAge);
+                    
+                    const inflatedMonthlyExpense = retirement.value.monthlyExpenseTarget * Math.pow(1 + (retirement.value.inflationRate / 100), yearsToRetire);
+                    const targetGoal = inflatedMonthlyExpense * 12 * yearsInRetirement;
+
+                    const r = retirement.value.expectedReturn / 100 / 12;
+                    const n = yearsToRetire * 12;
+                    const fvInitial = totalPortfolio.value * Math.pow(1 + r, n);
+                    const fvDca = r > 0 ? retirement.value.monthlyDca * ((Math.pow(1 + r, n) - 1) / r) : retirement.value.monthlyDca * n;
+                    
+                    return { targetGoal, projectedWealth: fvInitial + fvDca, yearsToRetire };
+                });
+
+                const renderPortfolioChart = () => {
+                    const ctx = document.getElementById('portfolioPieChart');
+                    if (!ctx) return;
+                    if (portfolioPieChart) portfolioPieChart.destroy();
+
+                    const labels = ['เงินสดฝากธนาคาร', 'หุ้นไทย', 'หุ้นอเมริกา', 'PVD/RMF', 'ประกันออมทรัพย์'];
+                    const data = [
+                        totalCash.value,
+                        parseFloat(portfolio.value.thaiStock) || 0,
+                        parseFloat(portfolio.value.usStock) || 0,
+                        parseFloat(portfolio.value.pvdRmf) || 0,
+                        parseFloat(portfolio.value.savingInsurance) || 0
+                    ];
+
+                    portfolioPieChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: data,
+                                backgroundColor: ['#34D399', '#FBBF24', '#60A5FA', '#C084FC', '#F472B6']
+                            }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false,
+                            plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } } }
+                        }
+                    });
+                };
+
+                const renderRetirementChart = () => {
+                    const ctx = document.getElementById('retirementChart');
+                    if (!ctx) return;
+
+                    const years = retirementCalc.value.yearsToRetire;
+                    const labels = Array.from({ length: years + 1 }, (_, i) => `อายุ ${retirement.value.currentAge + i}`);
+                    const wealthData = [];
+                    const r = retirement.value.expectedReturn / 100 / 12;
+
+                    for (let t = 0; t <= years; t++) {
+                        const n = t * 12;
+                        const fvInitial = totalPortfolio.value * Math.pow(1 + r, n);
+                        const fvDca = r > 0 ? retirement.value.monthlyDca * ((Math.pow(1 + r, n) - 1) / r) : retirement.value.monthlyDca * n;
+                        wealthData.push(Math.round(fvInitial + fvDca));
+                    }
+
+                    if (retirementChart) retirementChart.destroy();
+                    retirementChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'มูลค่าพอร์ตสะสม (บาท)', data: wealthData,
+                                borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                                fill: true, tension: 0.3
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                    });
+                };
+
+                const updateCharts = () => {
+                    renderPieChart();
+                    renderTrendChart();
+                };
+
+                const renderPieChart = () => {
+                    const ctx = document.getElementById('bubblePieChart');
+                    if (!ctx) return;
+                    const filtered = transactions.value.filter(t => t.date.startsWith(selectedMonth.value) && t.type === 'EXPENSE');
+                    const catMap = {};
+                    filtered.forEach(t => catMap[t.category] = (catMap[t.category] || 0) + t.amount);
+
+                    if (pieChart) pieChart.destroy();
+                    pieChart = new Chart(ctx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: Object.keys(catMap).length ? Object.keys(catMap) : ['ไม่มีข้อมูล'],
+                            datasets: [{
+                                data: Object.values(catMap).length ? Object.values(catMap) : [1],
+                                backgroundColor: ['#34D399', '#F87171', '#FBBF24', '#60A5FA', '#C084FC', '#F472B6']
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                    });
+                };
+
+                const renderTrendChart = () => {
+                    const ctx = document.getElementById('trendChart');
+                    if (!ctx) return;
+                    const days = Array.from({ length: 31 }, (_, i) => i + 1);
+                    const currExp = new Array(31).fill(0);
+                    transactions.value.filter(t => t.date.startsWith(selectedMonth.value) && t.type === 'EXPENSE').forEach(t => {
+                        const d = parseInt(t.date.split('-')[2]);
+                        if (d <= 31) currExp[d - 1] += t.amount;
+                    });
+
+                    if (lineChart) lineChart.destroy();
+                    lineChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: days,
+                            datasets: [{
+                                label: 'รายจ่าย', data: currExp,
+                                borderColor: '#059669', backgroundColor: 'rgba(5, 150, 105, 0.1)',
+                                fill: true, tension: 0.3
+                            }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                    });
+                };
+
+                const formatNumber = (num) => Number(num || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 });
+
+                return {
+                    currentTab, selectedMonth, searchQuery, filteredCategories, form, transactions,
+                    portfolio, totalPortfolio, addCashBank, removeCashBank,
+                    retirement, retirementCalc, pressKey, addTransaction, deleteTransaction, clearData,
+                    totalIncome, totalExpense, balance, selectedMonthSummary, calendarDays, formatNumber
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
